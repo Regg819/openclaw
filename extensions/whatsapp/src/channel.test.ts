@@ -443,6 +443,145 @@ describe("whatsapp group policy", () => {
   });
 });
 
+describe("whatsapp agent prompt", () => {
+  it("defaults to extensive reaction guidance when reactions are available", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          allowFrom: ["*"],
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.agentPrompt?.reactionGuidance?.({
+        cfg,
+        accountId: DEFAULT_ACCOUNT_ID,
+      }),
+    ).toEqual({
+      level: "extensive",
+      channelLabel: "WhatsApp",
+    });
+  });
+
+  it("returns minimal reaction guidance when configured", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          reactionLevel: "minimal",
+          allowFrom: ["*"],
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.agentPrompt?.reactionGuidance?.({
+        cfg,
+        accountId: DEFAULT_ACCOUNT_ID,
+      }),
+    ).toEqual({
+      level: "minimal",
+      channelLabel: "WhatsApp",
+    });
+  });
+
+  it("omits reaction guidance when WhatsApp reactions are disabled", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          actions: { reactions: false },
+          allowFrom: ["*"],
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.agentPrompt?.reactionGuidance?.({
+        cfg,
+        accountId: DEFAULT_ACCOUNT_ID,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("omits reaction guidance when reactionLevel disables agent reactions", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          reactionLevel: "ack",
+          allowFrom: ["*"],
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.agentPrompt?.reactionGuidance?.({
+        cfg,
+        accountId: DEFAULT_ACCOUNT_ID,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("whatsapp action discovery", () => {
+  it("advertises react when agent reactions are enabled", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          allowFrom: ["*"],
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.actions?.describeMessageTool?.({
+        cfg,
+        accountId: DEFAULT_ACCOUNT_ID,
+      })?.actions,
+    ).toEqual(["react", "poll"]);
+  });
+
+  it("omits react when reactionLevel disables agent reactions", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          reactionLevel: "ack",
+          allowFrom: ["*"],
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.actions?.describeMessageTool?.({
+        cfg,
+        accountId: DEFAULT_ACCOUNT_ID,
+      })?.actions,
+    ).toEqual(["poll"]);
+  });
+
+  it("uses the active account reactionLevel for discovery", () => {
+    const cfg = {
+      channels: {
+        whatsapp: {
+          reactionLevel: "ack",
+          allowFrom: ["*"],
+          accounts: {
+            work: {
+              reactionLevel: "minimal",
+            },
+          },
+        },
+      },
+    } as OpenClawConfig;
+
+    expect(
+      whatsappPlugin.actions?.describeMessageTool?.({
+        cfg,
+        accountId: "work",
+      })?.actions,
+    ).toEqual(["react", "poll"]);
+  });
+});
+
 describe("whatsappPlugin actions.handleAction react messageId resolution", () => {
   const baseCfg = {
     channels: { whatsapp: { actions: { reactions: true }, allowFrom: ["*"] } },
