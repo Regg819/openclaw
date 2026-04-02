@@ -10,7 +10,8 @@ import {
 } from "../../config/sessions/paths.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import { logVerbose } from "../../globals.js";
-import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
+import { clearCommandLane, getQueueSize, setCommandLaneConcurrency } from "../../process/command-queue.js";
+import { CommandLane } from "../../process/lanes.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
 import { hasControlCommand } from "../command-detection.js";
@@ -492,7 +493,21 @@ export async function runPreparedReply(
     isEmbeddedPiRunStreaming,
     resolveEmbeddedSessionLane,
   } = await loadPiEmbeddedRuntime();
-  const sessionLaneKey = resolveEmbeddedSessionLane(sessionKey ?? sessionIdFinal);
+
+  // Check if this is an approval command - use dedicated approval lane to prevent deadlock
+  // when plugin approval blocks inside an agent run
+  const trimmedBody = (queuedBody ?? "").trim().toLowerCase();
+  const isApprovalCommand = trimmedBody.startsWith("/approve") || trimmedBody.startsWith("/deny");
+
+  // Set up approval lane with higher concurrency if not already set
+  if (isApprovalCommand) {
+    setCommandLaneConcurrency(CommandLane.Approval, 2);
+  }
+
+  // Use approval lane for approval commands to bypass regular session queue
+  const sessionLaneKey = isApprovalCommand
+    ? CommandLane.Approval
+    : resolveEmbeddedSessionLane(sessionKey ?? sessionIdFinal);
   const laneSize = getQueueSize(sessionLaneKey);
   if (resolvedQueue.mode === "interrupt" && laneSize > 0) {
     const cleared = clearCommandLane(sessionLaneKey);
